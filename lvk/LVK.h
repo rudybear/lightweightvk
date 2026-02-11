@@ -994,6 +994,8 @@ class ICommandBuffer {
 
   virtual void cmdBindVertexBuffer(uint32_t index, BufferHandle buffer, uint64_t bufferOffset = 0) = 0;
   virtual void cmdBindIndexBuffer(BufferHandle indexBuffer, IndexFormat indexFormat, uint64_t indexBufferOffset = 0) = 0;
+  virtual void cmdBindBuffer(uint32_t index, BufferHandle buffer) = 0;
+  virtual void cmdBindTexture(uint32_t index, TextureHandle texture) = 0;
   virtual void cmdPushConstants(const void* data, size_t size, size_t offset = 0) = 0;
   template<typename Struct>
   void cmdPushConstants(const Struct& data, size_t offset = 0) {
@@ -1165,6 +1167,10 @@ class IContext {
                                    void* outData,
                                    size_t stride) const = 0;
 #pragma endregion
+
+  // Platform-specific: bindless texture support (Metal argument buffers, Vulkan descriptor indexing, etc.)
+  // Default no-op implementation for backends that don't need it
+  virtual void createTextureArgumentBuffer(const std::vector<TextureHandle>& textures) {}
 };
 
 } // namespace lvk
@@ -1241,6 +1247,12 @@ std::unique_ptr<lvk::IContext> createVulkanContextWithSwapchain(LVKwindow* windo
                                                                 const lvk::ContextConfig& cfg,
                                                                 lvk::HWDeviceType preferredDeviceType = lvk::HWDeviceType_Discrete,
                                                                 int selectedDevice = -1);
+
+
+std::unique_ptr<lvk::IContext> createMetalContextWithSwapchain(LVKwindow* window,
+                                                               uint32_t width,
+                                                               uint32_t height,
+                                                               const lvk::ContextConfig& cfg);
 #endif // LVK_WITH_GLFW || defined(ANDROID)
 
 } // namespace lvk

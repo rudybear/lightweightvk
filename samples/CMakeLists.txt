@@ -176,3 +176,13 @@ endif()
 
 ADD_DEMO("DEMO_001_SolarSystem")
 ADD_DEMO("Tiny_MeshLarge" LVK_WITH_SLANG)
+
+if (APPLE)
+  add_executable(MetalBindlessTest MetalBindlessTest.mm)
+  target_link_libraries(MetalBindlessTest PRIVATE "-framework Metal" "-framework Foundation" "-framework CoreGraphics")
+  lvk_set_cxxstd(MetalBindlessTest 20)
+
+  add_executable(MetalBindlessVisualTest MetalBindlessVisualTest.mm)
+  target_link_libraries(MetalBindlessVisualTest PRIVATE "-framework Metal" "-framework Foundation" "-framework CoreGraphics")
+  lvk_set_cxxstd(MetalBindlessVisualTest 20)
+endif()

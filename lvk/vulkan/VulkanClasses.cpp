@@ -2534,6 +2534,17 @@ void lvk::CommandBuffer::cmdBindIndexBuffer(BufferHandle indexBuffer, IndexForma
   vkCmdBindIndexBuffer(wrapper_->cmdBuf_, buf->vkBuffer_, indexBufferOffset, type);
 }
 
+void lvk::CommandBuffer::cmdBindBuffer(uint32_t index, BufferHandle buffer) {
+  LVK_ASSERT_MSG(false, "Not implemented");
+}
+
+void lvk::CommandBuffer::cmdBindTexture(uint32_t index, TextureHandle texture) {
+  // Stub implementation - Vulkan uses descriptor sets, not direct texture binding
+  // This method is primarily for Metal backend compatibility
+  (void)index;
+  (void)texture;
+}
+
 void lvk::CommandBuffer::cmdPushConstants(const void* data, size_t size, size_t offset) {
   LVK_PROFILER_FUNCTION();
 
@@ -5901,6 +5912,7 @@ lvk::ShaderModuleState lvk::VulkanContext::createShaderModuleFromGLSL(ShaderStag
       // https://github.com/KhronosGroup/Vulkan-Samples/blob/main/shaders/descriptor_indexing/nonuniform-quads.frag#L33-L39
       sourcePatched +=
           "#version 460\n"
+          "#extension GL_EXT_buffer_reference : require\n"
           "#extension GL_EXT_buffer_reference_uvec2 : require\n"
           "#extension GL_EXT_debug_printf : enable\n"
           "#extension GL_EXT_nonuniform_qualifier : require\n"
@@ -6193,6 +6205,7 @@ void lvk::VulkanContext::createInstance() {
       VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
 #elif defined(VK_USE_PLATFORM_ANDROID_KHR)
       VK_KHR_ANDROID_SURFACE_EXTENSION_NAME,
+// instanceExtensionNames.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
 #elif defined(__linux__)
 #if defined(VK_USE_PLATFORM_WAYLAND_KHR)
       VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME,
@@ -6202,10 +6215,9 @@ void lvk::VulkanContext::createInstance() {
 #elif defined(__APPLE__)
       VK_EXT_LAYER_SETTINGS_EXTENSION_NAME,
       VK_MVK_MACOS_SURFACE_EXTENSION_NAME,
-#endif
-#if defined(LVK_WITH_VULKAN_PORTABILITY)
       VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
 #endif
+
   };
 
   // check if we have the VK_EXT_debug_utils extension
@@ -6315,7 +6327,7 @@ void lvk::VulkanContext::createInstance() {
   };
 
   VkInstanceCreateFlags flags = 0;
-#if defined(LVK_WITH_VULKAN_PORTABILITY)
+#if defined(LVK_WITH_VULKAN_PORTABILITY) || defined(__APPLE__)
   flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 #endif
   const VkInstanceCreateInfo ci = {

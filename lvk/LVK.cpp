@@ -36,6 +36,10 @@
 #endif // LVK_WITH_GLFW
 
 #include <lvk/vulkan/VulkanClasses.h>
+#if LVK_WITH_METAL
+#include <lvk/metal/MetalContextFactory.h>
+#endif
+
 
 namespace {
 
@@ -369,12 +373,28 @@ std::unique_ptr<lvk::IContext> lvk::createVulkanContextWithSwapchain(LVKwindow* 
                                                                      int selectedDevice) {
   using namespace lvk;
 
-  std::unique_ptr<VulkanContext> ctx;
+  std::unique_ptr<lvk::IContext> ctx;
+
+  bool useMetal = false;
+#if LVK_WITH_METAL
+  useMetal = true;
+  if (const char* dev = std::getenv("LVK_DEVICE")) {
+      if (strcmp(dev, "vulkan") == 0) useMetal = false;
+  }
+  
+  if (useMetal) {
+    ctx = createMetalContext(createCocoaWindowView(window), width, height, cfg);
+    return ctx;
+  }
+#endif
+
+  // Vulkan context creation path
+  std::unique_ptr<VulkanContext> vkCtx;
 
 #if defined(_WIN32)
-  ctx = std::make_unique<VulkanContext>(cfg, (void*)glfwGetWin32Window(window));
+  vkCtx = std::make_unique<VulkanContext>(cfg, (void*)glfwGetWin32Window(window));
 #elif defined(ANDROID)
-  ctx = std::make_unique<VulkanContext>(cfg, (void*)window);
+  vkCtx = std::make_unique<VulkanContext>(cfg, (void*)window);
 #elif defined(__linux__)
 #if defined(LVK_WITH_WAYLAND)
   wl_surface* waylandWindow = glfwGetWaylandWindow(window);
@@ -382,18 +402,18 @@ std::unique_ptr<lvk::IContext> lvk::createVulkanContextWithSwapchain(LVKwindow* 
     LVK_ASSERT_MSG(false, "Wayland window not found");
     return nullptr;
   }
-  ctx = std::make_unique<VulkanContext>(cfg, (void*)waylandWindow, (void*)glfwGetWaylandDisplay());
+  vkCtx = std::make_unique<VulkanContext>(cfg, (void*)waylandWindow, (void*)glfwGetWaylandDisplay());
 #else
-  ctx = std::make_unique<VulkanContext>(cfg, (void*)glfwGetX11Window(window), (void*)glfwGetX11Display());
+  vkCtx = std::make_unique<VulkanContext>(cfg, (void*)glfwGetX11Window(window), (void*)glfwGetX11Display());
 #endif
 #elif defined(__APPLE__)
-  ctx = std::make_unique<VulkanContext>(cfg, createCocoaWindowView(window));
+  vkCtx = std::make_unique<VulkanContext>(cfg, createCocoaWindowView(window));
 #else
 #error Unsupported OS
 #endif
 
   HWDeviceDesc devices[16];
-  const uint32_t numDevices = ctx->queryDevices(devices, LVK_ARRAY_NUM_ELEMENTS(devices));
+  const uint32_t numDevices = vkCtx->queryDevices(devices, LVK_ARRAY_NUM_ELEMENTS(devices));
 
   if (!numDevices) {
     LVK_ASSERT_MSG(false, "GPU is not found");
@@ -427,7 +447,7 @@ std::unique_ptr<lvk::IContext> lvk::createVulkanContextWithSwapchain(LVKwindow* 
     return nullptr;
   }
 
-  Result res = ctx->initContext(devices[selectedDevice]);
+  Result res = vkCtx->initContext(devices[selectedDevice]);
 
   if (!res.isOk()) {
     LVK_ASSERT_MSG(false, "createVulkanContextWithSwapchain() failed");
@@ -435,13 +455,14 @@ std::unique_ptr<lvk::IContext> lvk::createVulkanContextWithSwapchain(LVKwindow* 
   }
 
   if (width > 0 && height > 0) {
-    res = ctx->initSwapchain(width, height);
+    res = vkCtx->initSwapchain(width, height);
     if (!res.isOk()) {
       LVK_ASSERT_MSG(false, "initSwapchain() failed");
       return nullptr;
     }
   }
 
-  return std::move(ctx);
+  return std::move(vkCtx);
+//#endif // LVK_WITH_METAL
 }
 #endif // LVK_WITH_GLFW || defined(ANDROID)

@@ -33,6 +33,9 @@ lvk_set_folder(MachineIndependent "third-party/glslang")
 lvk_set_folder(OSDependent        "third-party/glslang")
 lvk_set_folder(SPIRV              "third-party/glslang")
 lvk_set_folder(glslang-default-resource-limits "third-party/glslang")
+set_property(TARGET glslang PROPERTY CXX_STANDARD 20)
+set_property(TARGET SPIRV PROPERTY CXX_STANDARD 20)
+set_property(TARGET glslang-default-resource-limits PROPERTY CXX_STANDARD 20)
 # cmake-format: on
 
 # slang

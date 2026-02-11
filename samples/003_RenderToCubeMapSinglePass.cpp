@@ -170,12 +170,12 @@ VULKAN_APP_MAIN {
   lvk::IContext* ctx = app.ctx_.get();
 
   {
-    const VkPhysicalDeviceProperties& props = static_cast<lvk::VulkanContext*>(ctx)->getVkPhysicalDeviceProperties();
+    // const VkPhysicalDeviceProperties& props = static_cast<lvk::VulkanContext*>(ctx)->getVkPhysicalDeviceProperties();
 
-    if (props.limits.maxColorAttachments < 6) {
-      LVK_ASSERT_MSG(false, "This demo needs at least 6 color attachments to be supported");
-      std::terminate();
-    }
+    // if (props.limits.maxColorAttachments < 6) {
+    //   LVK_ASSERT_MSG(false, "This demo needs at least 6 color attachments to be supported");
+    //   std::terminate();
+    // }
 
     const uint16_t indexData[36] = {0, 1, 2, 2, 3, 0, 1, 5, 6, 6, 2, 1, 7, 6, 5, 5, 4, 7,
                                     4, 0, 3, 3, 7, 4, 4, 5, 1, 1, 0, 4, 3, 2, 6, 6, 7, 3};

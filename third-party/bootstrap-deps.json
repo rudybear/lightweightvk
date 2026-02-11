@@ -1,227 +1,235 @@
 [
-{
-    "name": "meshoptimizer",
-    "source": {
-        "type": "git",
-        "url": "https://github.com/zeux/meshoptimizer.git",
-        "revision": "v1.0"
+    {
+        "name": "meshoptimizer",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/zeux/meshoptimizer.git",
+            "revision": "v1.0"
+        }
+    },
+    {
+        "name": "glslang",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/KhronosGroup/glslang.git",
+            "revision": "16.1.0"
+        }
+    },
+    {
+        "name": "SPIRV-Reflect",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/KhronosGroup/SPIRV-Reflect.git",
+            "revision": "ef913b3ab3da1becca3cf46b15a10667c67bebe5"
+        }
+    },
+    {
+        "name": "SPIRV-Cross",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/KhronosGroup/SPIRV-Cross.git",
+            "revision": "main"
+        }
+    },
+    {
+        "name": "fast_obj",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/thisistherk/fast_obj.git",
+            "revision": "d620667f10a548dee94dbc8c144bb22f79162176"
+        }
+    },
+    {
+        "name": "glfw",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/glfw/glfw.git",
+            "revision": "3.4"
+        }
+    },
+    {
+        "name": "stb",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/nothings/stb.git",
+            "revision": "f1c79c02822848a9bed4315b12c8c8f3761e1296"
+        }
+    },
+    {
+        "name": "3D-Graphics-Rendering-Cookbook/data",
+        "source": {
+            "type": "sourcefile",
+            "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/data/OpenSans-Light.ttf",
+            "sha1": "40442c189568184b6e6c27a25d69f14d91b65039"
+        }
+    },
+    {
+        "name": "3D-Graphics-Rendering-Cookbook/shared",
+        "source": {
+            "type": "sourcefile",
+            "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/shared/UtilsFPS.h",
+            "sha1": "cf19e032be65f471e12274d15dcc2989e8c2e469"
+        }
+    },
+    {
+        "name": "3D-Graphics-Rendering-Cookbook/shared",
+        "source": {
+            "type": "sourcefile",
+            "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/shared/Trackball.h",
+            "sha1": "da9a729862ba4df957e89984c1655186d2ec74f0"
+        }
+    },
+    {
+        "name": "3D-Graphics-Rendering-Cookbook/shared",
+        "source": {
+            "type": "sourcefile",
+            "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/shared/Camera.h",
+            "sha1": "d0fa491b2a075689ed5bf3f802269b546f267815"
+        }
+    },
+    {
+        "name": "3D-Graphics-Rendering-Cookbook/shared",
+        "source": {
+            "type": "sourcefile",
+            "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/shared/UtilsMath.h",
+            "sha1": "e50eb2ecfe9342ad66423493cd127ff00c1053b2"
+        }
+    },
+    {
+        "name": "3D-Graphics-Rendering-Cookbook/shared",
+        "source": {
+            "type": "sourcefile",
+            "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/shared/UtilsCubemap.h",
+            "sha1": "ddcfd57f144982bb2b2a43f0f47780be933a50df"
+        }
+    },
+    {
+        "name": "3D-Graphics-Rendering-Cookbook/shared",
+        "source": {
+            "type": "sourcefile",
+            "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/shared/UtilsCubemap.cpp",
+            "sha1": "37093b74ee4a3f9b5073e8c777511cba53793a2a"
+        }
+    },
+    {
+        "name": "3D-Graphics-Rendering-Cookbook/shared",
+        "source": {
+            "type": "sourcefile",
+            "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/shared/Bitmap.h",
+            "sha1": "3c13995fb713547357ed6858018ed389ef76718b"
+        }
+    },
+    {
+        "name": "openxr-sdk",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/KhronosGroup/OpenXR-SDK.git",
+            "sha1": "release-1.1.54"
+        }
+    },
+    {
+        "name": "glm",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/g-truc/glm.git",
+            "revision": "1.0.0"
+        }
+    },
+    {
+        "name": "taskflow",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/taskflow/taskflow.git",
+            "revision": "v3.11.0"
+        }
+    },
+    {
+        "name": "imgui",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/ocornut/imgui.git",
+            "revision": "v1.92.5"
+        }
+    },
+    {
+        "name": "implot",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/epezent/implot",
+            "revision": "285df95318a4af7c2fe2da265572bdf1020ade49"
+        }
+    },
+    {
+        "name": "volk",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/zeux/volk",
+            "revision": "04a46e2e522e91da0e9d4c146097501afb5d7c83"
+        }
+    },
+    {
+        "name": "vulkan-headers",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/KhronosGroup/Vulkan-Headers.git",
+            "revision": "65586d13fb197279942581ba9c2eb2c6b664487c"
+        }
+    },
+    {
+        "name": "vma",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git",
+            "revision": "v3.3.0"
+        }
+    },
+    {
+        "name": "tracy",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/wolfpld/tracy.git",
+            "revision": "v0.13.1"
+        }
+    },
+    {
+        "name": "minilog",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/corporateshark/minilog",
+            "revision": "release-1.2.0"
+        }
+    },
+    {
+        "name": "ldrutils",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/corporateshark/ldrutils",
+            "revision": "c38e2673e182a2396e8e7f5c09e03f60dd0df8ee"
+        }
+    },
+    {
+        "name": "cmake-wayland",
+        "source": {
+            "type": "sourcefile",
+            "url": "https://raw.githubusercontent.com/LunarG/VulkanSamples/master/cmake/FindWayland.cmake",
+            "sha1": "c2f6e9245c257e6eff91a53602844175e12a6ecc"
+        }
+    },
+    {
+        "name": "android-validation-layers",
+        "source": {
+            "type": "archive",
+            "url": "https://github.com/KhronosGroup/Vulkan-ValidationLayers/releases/download/vulkan-sdk-1.4.335.0/android-binaries-1.4.335.0.zip",
+            "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.116 Safari/537.36"
+        }
+    },
+    {
+        "name": "ktx-software",
+        "source": {
+            "type": "git",
+            "url": "https://github.com/KhronosGroup/KTX-Software.git",
+            "revision": "5a07bc6f8eb95b6ea5b636903b335947d4684cef",
+            "recursive": false
+        }
     }
-},
-{
-    "name": "glslang",
-    "source": {
-        "type": "git",
-        "url": "https://github.com/KhronosGroup/glslang.git",
-        "revision": "16.1.0"
-    }
-},
-{
-    "name": "SPIRV-Reflect",
-    "source": {
-        "type": "git",
-        "url": "https://github.com/KhronosGroup/SPIRV-Reflect.git",
-        "revision": "ef913b3ab3da1becca3cf46b15a10667c67bebe5"
-    }
-},
-{
-    "name": "fast_obj",
-    "source": {
-        "type": "git",
-        "url": "https://github.com/thisistherk/fast_obj.git",
-        "revision": "d620667f10a548dee94dbc8c144bb22f79162176"
-    }
-},
-{
-    "name": "glfw",
-    "source": {
-        "type": "git",
-        "url": "https://github.com/glfw/glfw.git",
-        "revision": "3.4"
-    }
-},
-{
-    "name": "stb",
-    "source": {
-        "type": "git",
-        "url": "https://github.com/nothings/stb.git",
-        "revision": "f1c79c02822848a9bed4315b12c8c8f3761e1296"
-    }
-},
-{
-    "name": "3D-Graphics-Rendering-Cookbook/data",
-    "source": {
-        "type": "sourcefile",
-        "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/data/OpenSans-Light.ttf",
-        "sha1": "40442c189568184b6e6c27a25d69f14d91b65039"
-    }
-},
-{
-    "name": "3D-Graphics-Rendering-Cookbook/shared",
-    "source": {
-        "type": "sourcefile",
-        "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/shared/UtilsFPS.h",
-        "sha1": "cf19e032be65f471e12274d15dcc2989e8c2e469"
-    }
-},
-{
-    "name": "3D-Graphics-Rendering-Cookbook/shared",
-    "source": {
-        "type": "sourcefile",
-        "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/shared/Trackball.h",
-        "sha1": "da9a729862ba4df957e89984c1655186d2ec74f0"
-    }
-},
-{
-    "name": "3D-Graphics-Rendering-Cookbook/shared",
-    "source": {
-        "type": "sourcefile",
-        "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/shared/Camera.h",
-        "sha1": "d0fa491b2a075689ed5bf3f802269b546f267815"
-    }
-},
-{
-    "name": "3D-Graphics-Rendering-Cookbook/shared",
-    "source": {
-        "type": "sourcefile",
-        "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/shared/UtilsMath.h",
-        "sha1": "e50eb2ecfe9342ad66423493cd127ff00c1053b2"
-    }
-},
-{
-    "name": "3D-Graphics-Rendering-Cookbook/shared",
-    "source": {
-        "type": "sourcefile",
-        "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/shared/UtilsCubemap.h",
-        "sha1": "ddcfd57f144982bb2b2a43f0f47780be933a50df"
-    }
-},
-{
-    "name": "3D-Graphics-Rendering-Cookbook/shared",
-    "source": {
-        "type": "sourcefile",
-        "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/shared/UtilsCubemap.cpp",
-        "sha1": "37093b74ee4a3f9b5073e8c777511cba53793a2a"
-    }
-},
-{
-    "name": "3D-Graphics-Rendering-Cookbook/shared",
-    "source": {
-        "type": "sourcefile",
-        "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/shared/Bitmap.h",
-        "sha1": "3c13995fb713547357ed6858018ed389ef76718b"
-    }
-},
-{
-    "name": "openxr-sdk",
-    "source": {
-        "type": "git",
-        "url": "https://github.com/KhronosGroup/OpenXR-SDK.git",
-        "sha1": "release-1.1.54"
-    }
-},
-{
-    "name": "glm",
-    "source": {
-        "type": "git",
-        "url": "https://github.com/g-truc/glm.git",
-        "revision": "1.0.0"
-    }
-},
-{
-    "name": "taskflow",
-    "source": {
-        "type": "git",
-        "url": "https://github.com/taskflow/taskflow.git",
-        "revision": "v3.11.0"
-    }
-},
-{
-    "name": "imgui",
-    "source": {
-        "type": "git",
-        "url": "https://github.com/ocornut/imgui.git",
-        "revision": "v1.92.5"
-    }
-},
-{
-    "name": "implot",
-    "source": {
-        "type": "git",
-        "url": "https://github.com/epezent/implot",
-        "revision": "285df95318a4af7c2fe2da265572bdf1020ade49"
-    }
-},
-{
-    "name": "volk",
-    "source": {
-        "type": "git",
-        "url": "https://github.com/zeux/volk",
-        "revision": "04a46e2e522e91da0e9d4c146097501afb5d7c83"
-    }
-},
-{
-    "name": "vulkan-headers",
-    "source": {
-        "type": "git",
-        "url": "https://github.com/KhronosGroup/Vulkan-Headers.git",
-        "revision": "65586d13fb197279942581ba9c2eb2c6b664487c"
-    }
-},
-{
-    "name": "vma",
-    "source": {
-        "type": "git",
-        "url": "https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git",
-        "revision": "v3.3.0"
-    }
-},
-{
-    "name": "tracy",
-    "source": {
-        "type": "git",
-        "url": "https://github.com/wolfpld/tracy.git",
-        "revision": "v0.13.1"
-    }
-},
-{
-    "name": "minilog",
-    "source": {
-        "type": "git",
-        "url": "https://github.com/corporateshark/minilog",
-        "revision": "release-1.2.0"
-    }
-},
-{
-    "name": "ldrutils",
-    "source": {
-        "type": "git",
-        "url": "https://github.com/corporateshark/ldrutils",
-        "revision": "c38e2673e182a2396e8e7f5c09e03f60dd0df8ee"
-    }
-},
-{
-    "name": "cmake-wayland",
-    "source": {
-        "type": "sourcefile",
-        "url": "https://raw.githubusercontent.com/LunarG/VulkanSamples/master/cmake/FindWayland.cmake",
-        "sha1": "c2f6e9245c257e6eff91a53602844175e12a6ecc"
-    }
-},
-{
-    "name": "android-validation-layers",
-    "source": {
-        "type": "archive",
-        "url": "https://github.com/KhronosGroup/Vulkan-ValidationLayers/releases/download/vulkan-sdk-1.4.335.0/android-binaries-1.4.335.0.zip",
-        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.116 Safari/537.36"
-    }
-},
-{
-    "name": "ktx-software",
-    "source": {
-        "type": "git",
-        "url": "https://github.com/KhronosGroup/KTX-Software.git",
-        "revision": "5a07bc6f8eb95b6ea5b636903b335947d4684cef",
-        "recursive": false
-    }
-}
 ]

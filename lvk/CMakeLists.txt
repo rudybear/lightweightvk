@@ -25,11 +25,33 @@ if(WAYLAND_FOUND)
 endif()
 
 lvk_setup_target(LVKLibrary)
-lvk_set_folder(LVKLibrary "LVK")
+  add_subdirectory(${LVK_ROOT_DIR}/third-party/deps/src/SPIRV-Cross ${CMAKE_BINARY_DIR}/third-party/spirv-cross)
+  lvk_set_folder(spirv-cross-core "third-party")
+  lvk_set_folder(spirv-cross-glsl "third-party")
+  lvk_set_folder(spirv-cross-cpp  "third-party")
+  lvk_set_folder(spirv-cross-msl  "third-party")
+  lvk_set_folder(spirv-cross-hlsl "third-party")
+  lvk_set_folder(spirv-cross-reflect "third-party")
+  lvk_set_folder(spirv-cross-util "third-party")
 
 add_subdirectory(vulkan)
 
 target_link_libraries(LVKLibrary PUBLIC LVKVulkan)
+
+if (LVK_WITH_METAL)
+  target_sources(LVKLibrary PRIVATE
+    metal/MetalContext.mm
+    metal/MetalCommandBuffer.mm
+    metal/MetalShaderUtils.cpp
+  )
+  target_link_libraries(LVKLibrary PRIVATE spirv-cross-msl glslang SPIRV glslang-default-resource-limits)
+
+  find_library(METAL_LIBRARY Metal)
+  find_library(QUARTZCORE_LIBRARY QuartzCore)
+  find_library(FOUNDATION_LIBRARY Foundation)
+  find_library(COCOA_LIBRARY Cocoa)
+  target_link_libraries(LVKLibrary PUBLIC ${METAL_LIBRARY} ${QUARTZCORE_LIBRARY} ${FOUNDATION_LIBRARY} ${COCOA_LIBRARY})
+endif()
 if(LVK_WITH_GLFW)
   target_link_libraries(LVKLibrary PUBLIC glfw)
 endif()

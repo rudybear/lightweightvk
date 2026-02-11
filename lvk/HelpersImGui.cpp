@@ -23,6 +23,9 @@
 namespace {
 
 static const char* codeVS = R"(
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_nonuniform_qualifier : require
+
 layout (location = 0) out vec4 out_color;
 layout (location = 1) out vec2 out_uv;
 
@@ -60,12 +63,17 @@ void main() {
 })";
 
 static const char* codeFS = R"(
+#extension GL_EXT_nonuniform_qualifier : require
+
 layout (location = 0) in vec4 in_color;
 layout (location = 1) in vec2 in_uv;
 
 layout (location = 0) out vec4 out_color;
 
 layout (constant_id = 0) const bool kNonLinearColorSpace = false;
+
+layout (set = 0, binding = 0) uniform texture2D kTextures2D[];
+layout (set = 0, binding = 1) uniform sampler kSamplers[];
 
 layout(push_constant) uniform PushConstants {
   vec4 LRTB;
@@ -316,6 +324,8 @@ void ImGuiRenderer::endFrame(lvk::ICommandBuffer& cmdBuffer) {
   uint32_t vtxOffset = 0;
 
   cmdBuffer.cmdBindIndexBuffer(drawableData.ib_, lvk::IndexFormat_UI16);
+  uint64_t vtxOffset0 = 0;
+  cmdBuffer.cmdBindVertexBuffer(1, drawableData.vb_, vtxOffset0); // Bind at slot 1
   cmdBuffer.cmdBindRenderPipeline(pipeline_);
 
   for (const ImDrawList* cmdList : dd->CmdLists) {
@@ -340,7 +350,8 @@ void ImGuiRenderer::endFrame(lvk::ICommandBuffer& cmdBuffer) {
         uint32_t samplerId = 0;
       } bindData = {
           .LRTB = {L, R, T, B},
-          .vb = ctx_.gpuAddress(drawableData.vb_),
+          //.vb = ctx_.gpuAddress(drawableData.vb_), // Use buffer binding instead
+          .vb = 0,
           .textureId = static_cast<uint32_t>(cmd.GetTexID()),
           .samplerId = samplerClamp_.index(),
       };

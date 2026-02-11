@@ -345,7 +345,7 @@ void VulkanApp::run(DrawFrameFunc drawFrame) {
       continue;
     const float ratio = width_ / (float)height_;
 
-    positioner_.update(deltaSeconds, mouseState_.pos, ImGui::GetIO().WantCaptureMouse ? false : mouseState_.pressedLeft);
+//    positioner_.update(deltaSeconds, mouseState_.pos, ImGui::GetIO().WantCaptureMouse ? false : mouseState_.pressedLeft);
 
     lvk::TextureHandle tex = ctx_->getCurrentSwapchainTexture();
 

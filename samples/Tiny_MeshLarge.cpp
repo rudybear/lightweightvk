@@ -18,6 +18,8 @@
 #if !defined(_USE_MATH_DEFINES)
 #define _USE_MATH_DEFINES
 #endif // _USE_MATH_DEFINES
+
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <cassert>
 #include <cmath>
 #include <cstddef>
@@ -44,11 +46,14 @@
 #include <shared/UtilsFPS.h>
 #include <stb/stb_image.h>
 #include <stb/stb_image_resize2.h>
+#include <stb/stb_image_write.h>
 #include <taskflow/taskflow.hpp>
 
 #include <implot/implot.h>
 #include <lvk/HelpersImGui.h>
 #include <lvk/LVK.h>
+#if defined(__APPLE__)
+#endif
 
 #if defined(ANDROID)
 #include <android_native_app_glue.h>
@@ -60,22 +65,23 @@
 
 #include "DEMO_002_Bistro.cpp" // temporary
 
-constexpr uint32_t kMeshCacheVersion = 0xC0DE000A;
+constexpr uint32_t kMeshCacheVersion = 0xC0DE000B;
 #if !defined(__APPLE__)
 constexpr int kNumSamplesMSAA = 8;
 #else
-constexpr int kNumSamplesMSAA = 4;
+constexpr int kNumSamplesMSAA = 1;
 #endif
 #if defined(__APPLE__) || defined(ANDROID)
 constexpr bool kEnableCompression = false;
 #else
-constexpr bool kEnableCompression = true;
+constexpr bool kEnableCompression = false;
 #endif
 constexpr bool kPreferIntegratedGPU = false;
-#if defined(NDEBUG)
 constexpr bool kEnableValidationLayers = false;
+#if defined(NDEBUG)
+// constexpr bool kEnableValidationLayers = false;
 #else
-constexpr bool kEnableValidationLayers = true;
+// constexpr bool kEnableValidationLayers = true;
 #endif // NDEBUG
 
 std::string folderThirdParty;
@@ -104,6 +110,7 @@ double timestampEndRendering = 0;
 // TODO: After fix, use the only shader with binding = 2 to be compatible with Vulkan image layout on other platforms.
 #ifdef __APPLE__
 const char* kCodeComputeTest = R"(
+#extension GL_EXT_nonuniform_qualifier : require
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 layout (set = 0, binding = 0, rgba8) uniform image2D kTextures2DInOut[];
@@ -466,10 +473,290 @@ void main() {
 }
 )";
 
+// --- Metal Shaders ---
+
+// Mesh shaders
+const char* kCodeVS_Metal = R"(
+#include <metal_stdlib>
+using namespace metal;
+
+struct VertexIn {
+    float3 position [[attribute(0)]];
+    half2 uv [[attribute(1)]];     // Matches HalfFloat2 in vertex descriptor
+    ushort normal [[attribute(2)]];
+    ushort mtlIndex [[attribute(3)]];
+};
+
+struct VertexOut {
+    float4 position [[position]];
+    float3 normal;
+    float2 uv;
+    float4 shadowCoords;
+    uint mtlIndex [[flat]];
+};
+
+struct PerFrame {
+    float4x4 proj;
+    float4x4 view;
+    float4x4 light;
+    uint texSkyboxRadiance;
+    uint texSkyboxIrradiance;
+    uint texShadow;
+    uint sampler0;
+    uint samplerShadow0;
+};
+
+struct PerObject {
+    float4x4 model;
+    float4x4 normal;
+};
+
+float3 unpackOctahedral16(ushort data) {
+    float2 f = float2(float(data & 0xFFu), float(data >> 8u)) / 255.0;
+    f = f * 2.0 - 1.0;
+    float3 n = float3(f.x, f.y, 1.0 - abs(f.x) - abs(f.y));
+    float t = saturate(-n.z);
+    n.x += n.x >= 0.0 ? -t : t;
+    n.y += n.y >= 0.0 ? -t : t;
+    return normalize(n);
+}
+
+vertex VertexOut main0(VertexIn in [[stage_in]],
+                       constant PerFrame& perFrame [[buffer(27)]],
+                       constant PerObject& perObject [[buffer(28)]]) {
+    VertexOut out;
+    float4 worldPos = perObject.model * float4(in.position, 1.0);
+    out.position = perFrame.proj * perFrame.view * worldPos;
+    out.position.y = -out.position.y;
+    // DEBUG: Hardcode Constant
+    // if ((uint(in.mtlIndex) % 2) == 0)
+    //     out.position = float4(0.0, 0.0, 0.5, 1.0); // Center
+    // else
+    //     out.position = float4(0.5, 0.5, 0.5, 1.0); // Offset
+    
+    // out.position = float4(in.position * 0.01, 1.0);
+    out.uv = float2(in.uv);
+    out.normal = (perObject.normal * float4(unpackOctahedral16(in.normal), 0.0)).xyz;
+    // out.normal = float3(0, 1, 0); // Dummy
+    out.mtlIndex = uint(in.mtlIndex);
+    out.shadowCoords = perFrame.light * worldPos;
+    // out.shadowCoords = float4(0);
+    return out;
+}
+)";
+
+// Fullscreen quad shaders (no vertex attributes)
+const char* kFullscreenMetal = R"(
+#include <metal_stdlib>
+using namespace metal;
+
+struct VertexOutFullscreen {
+    float4 position [[position]];
+    float2 uv;
+};
+
+vertex VertexOutFullscreen fullscreenVS(uint vertexID [[vertex_id]]) {
+    float x = -1.0 + float((vertexID & 1) << 2);
+    float y = -1.0 + float((vertexID & 2) << 1);
+    VertexOutFullscreen out;
+    out.uv = float2((x+1.0)*0.5, (y+1.0)*0.5);
+    out.position = float4(x, y, 0.0, 1.0);
+    return out;
+}
+
+fragment float4 fullscreenFS(VertexOutFullscreen in [[stage_in]],
+                             texture2d<float> tex [[texture(0)]]) {
+    sampler smp(min_filter::linear, mag_filter::linear);
+    // DEBUG DIAGNOSTICS
+    // The following lines are commented out because 'in.mtlIndex' and 'mtl' are not
+    // available in the 'fullscreenFS' function's scope.
+    // if (in.mtlIndex > 10000) return float4(1, 1, 0, 1); // Yellow (Garbage Mtl Index)
+    // if (mtl.texDiffuse == 0) return float4(0, 0, 1, 1); // Blue (Slot 0)
+    // if (mtl.texDiffuse >= 500000) return float4(1, 0, 0, 1); // Red (Out of Range)
+    // return float4(0, 1, 0, 1); // Green (Good Slot)
+    return tex.sample(smp, in.uv);
+}
+)";
+
+const char* kCodeFS_Metal = R"(
+#include <metal_stdlib>
+using namespace metal;
+
+struct VertexOut {
+    float4 position [[position]];
+    float3 normal;
+    float2 uv;
+    float4 shadowCoords;
+    uint mtlIndex [[flat]];
+};
+
+struct GPUMaterial {
+    float4 ambient;
+    float4 diffuse;
+    uint texAmbient;
+    uint texDiffuse;
+    uint texAlpha;
+    uint padding;
+};
+
+// Array of textures for bindless access
+struct TextureTable {
+    array<texture2d<float>, 500000> textures [[id(0)]];
+};
+
+float4 sampleTex(device TextureTable& table, uint idx, sampler smp, float2 uv) {
+    if (idx < 500000) return table.textures[idx].sample(smp, uv);
+    return float4(1.0);
+}
+
+float PCF3(depth2d<float> shadowMap, float3 uvw) {
+    constexpr sampler shadowSmp(min_filter::linear, mag_filter::linear,
+                                compare_func::less_equal,
+                                s_address::clamp_to_edge, t_address::clamp_to_edge);
+    float size = 1.0 / shadowMap.get_width();
+    float shadow = 0.0;
+    for (int v = -1; v <= 1; v++)
+        for (int u = -1; u <= 1; u++)
+            shadow += shadowMap.sample_compare(shadowSmp, uvw.xy + size * float2(u, v), uvw.z);
+    return shadow / 9.0;
+}
+
+float computeShadow(depth2d<float> shadowMap, float4 s) {
+    s = s / s.w;
+    if (s.z > -1.0 && s.z < 1.0) {
+        float depthBias = -0.00005;
+        float shadowSample = PCF3(shadowMap, float3(s.x, 1.0 - s.y, s.z + depthBias));
+        return mix(0.3, 1.0, shadowSample);
+    }
+    return 1.0;
+}
+
+fragment float4 main0(VertexOut in [[stage_in]],
+                      device GPUMaterial* materials [[buffer(26)]],
+                      device TextureTable& texArgs [[buffer(30)]],
+                      depth2d<float> shadowMap [[texture(5)]],
+                      texturecube<float> skyboxIrradiance [[texture(6)]]) {
+
+    constexpr sampler smp(min_filter::linear, mag_filter::linear, mip_filter::linear,
+                          s_address::repeat, t_address::repeat);
+
+    device const GPUMaterial& mtl = materials[in.mtlIndex];
+
+    // Alpha test
+    float4 alpha = sampleTex(texArgs, mtl.texAlpha, smp, in.uv);
+    if (mtl.texAlpha > 0 && alpha.r < 0.5)
+        discard_fragment();
+
+    float4 Ka = mtl.ambient * sampleTex(texArgs, mtl.texAmbient, smp, in.uv);
+    float4 Kd = mtl.diffuse * sampleTex(texArgs, mtl.texDiffuse, smp, in.uv);
+
+    if (Kd.a < 0.5)
+        discard_fragment();
+
+    float3 n = normalize(in.normal);
+
+    // IBL diffuse (matches Vulkan fragment shader exactly)
+    const float4 f0 = float4(0.04);
+    float4 diffuse = skyboxIrradiance.sample(smp, n) * Kd * (float4(1.0) - f0);
+
+    // Shadow
+    float shadow = computeShadow(shadowMap, in.shadowCoords);
+
+    return Ka + diffuse * shadow;
+}
+)";
+const char* kShadowVS_Metal = R"(
+#include <metal_stdlib>
+using namespace metal;
+
+struct PerFrame {
+    float4x4 proj;
+    float4x4 view;
+    float4x4 light;
+};
+struct PerObject {
+    float4x4 model;
+};
+
+struct VertexIn {
+    float4 position [[attribute(0)]];
+};
+
+vertex float4 main0(VertexIn in [[stage_in]],
+                    constant PerFrame& perFrame [[buffer(27)]],
+                    constant PerObject& perObject [[buffer(28)]]) {
+    // return perFrame.proj * perFrame.view * perObject.model * float4(in.position.xyz, 1.0);
+    return perFrame.proj * perFrame.view * perObject.model * float4(in.position.xyz, 1.0);
+    // DEBUG: Hardcode Draw
+    // return float4(in.position.xyz * 0.01, 1.0); // Scale down, placed at center
+}
+)";
+
+const char* kShadowFS_Metal = R"(
+#include <metal_stdlib>
+using namespace metal;
+fragment void main0() {}
+)";
+
+const char* kSkyboxVS_Metal = R"(
+#include <metal_stdlib>
+using namespace metal;
+
+struct PerFrame {
+    float4x4 proj;
+    float4x4 view;
+};
+
+struct VertexOut {
+    float4 position [[position]];
+    float3 texCoords;
+};
+
+constant float3 positions[8] = {
+    float3(-1.0,-1.0, 1.0), float3( 1.0,-1.0, 1.0), float3( 1.0, 1.0, 1.0), float3(-1.0, 1.0, 1.0),
+    float3(-1.0,-1.0,-1.0), float3( 1.0,-1.0,-1.0), float3( 1.0, 1.0,-1.0), float3(-1.0, 1.0,-1.0)
+};
+
+constant int indices[36] = {
+    0, 1, 2, 2, 3, 0, 1, 5, 6, 6, 2, 1, 7, 6, 5, 5, 4, 7, 4, 0, 3, 3, 7, 4, 4, 5, 1, 1, 0, 4, 3, 2, 6, 6, 7, 3
+};
+
+vertex VertexOut main0(uint vertexID [[vertex_id]], constant PerFrame& perFrame [[buffer(27)]]) {
+    VertexOut out;
+    float3 pos = positions[indices[vertexID]];
+    float4x4 view = perFrame.view;
+    view[3] = float4(0, 0, 0, 1); // remove translation
+    float4 clipPos = (perFrame.proj * view * float4(pos, 1.0)).xyww;
+    clipPos.y = -clipPos.y;
+    out.position = clipPos;
+    out.texCoords = pos;
+    return out;
+}
+)";
+
+const char* kSkyboxFS_Metal = R"(
+#include <metal_stdlib>
+using namespace metal;
+
+struct FragIn {
+    float4 position [[position]];
+    float3 texCoords;
+};
+
+fragment float4 main0(FragIn in [[stage_in]],
+                      texturecube<float> cubemap [[texture(0)]]) {
+    constexpr sampler smp(min_filter::linear, mag_filter::linear, mip_filter::linear);
+    return cubemap.sample(smp, in.texCoords);
+}
+)";
+
+
 using glm::mat4;
 using glm::vec2;
 using glm::vec3;
 using glm::vec4;
+
+bool g_isMetal = false;
 
 int width_ = 0;
 int height_ = 0;
@@ -581,7 +868,7 @@ struct CachedMaterial {
 };
 
 // this goes into our GLSL shaders
-struct GPUMaterial {
+struct alignas(16) GPUMaterial {
   vec4 ambient = vec4(0.0f);
   vec4 diffuse = vec4(0.0f);
   uint32_t texAmbient = 0;
@@ -628,6 +915,9 @@ std::mutex loadedMaterialsMutex_;
 std::atomic<bool> loaderShouldExit_ = false;
 std::atomic<uint32_t> remainingMaterialsToLoad_ = 0;
 std::unique_ptr<tf::Executor> loaderPool_ = std::make_unique<tf::Executor>(std::max(2u, std::thread::hardware_concurrency() / 2));
+// Texture slot remapping for Metal discrete limits
+static std::vector<lvk::TextureHandle> s_textureSlots;
+static std::unordered_map<uint32_t, uint32_t> s_handleToSlot;
 
 static bool endsWith(const std::string& str, const std::string& suffix) {
   return str.size() >= suffix.size() && 0 == str.compare(str.size() - suffix.size(), suffix.size(), suffix);
@@ -666,19 +956,29 @@ void createOffscreenFramebuffer();
 
 bool init() {
   {
-    const uint32_t pixel = 0xFFFFFFFF;
+    // Slot 0: Magenta Dummy with  // Create a dummy texture (white)
+    const uint32_t pixel = 0xFFFFFFFF; // White
     textureDummyWhite_ = ctx_->createTexture(
         {
             .type = lvk::TextureType_2D,
-            .format = lvk::Format_R_UN8,
+            .format = lvk::Format_RGBA_UN8,
             .dimensions = {1, 1},
             .usage = lvk::TextureUsageBits_Sampled,
-            .components = {lvk::Swizzle_1, lvk::Swizzle_1, lvk::Swizzle_1, lvk::Swizzle_1},
+            .components = {lvk::Swizzle_Default, lvk::Swizzle_Default, lvk::Swizzle_Default, lvk::Swizzle_Default},
             .data = &pixel,
-            .debugName = "dummy 1x1 (white)",
+            .debugName = "Slot 0 (Magenta Default)",
         },
         nullptr);
+    
+    printf("Tiny_MeshLarge::init: Created Dummy Texture. Handle Index=%d\n", textureDummyWhite_.index());
+    
+    s_textureSlots.clear();
+    s_handleToSlot.clear();
+    s_textureSlots.push_back(textureDummyWhite_);
+    s_handleToSlot[textureDummyWhite_.index()] = textureDummyWhite_.index();
   }
+
+
 
   ubPerFrame_ = ctx_->createBuffer({
       .usage = lvk::BufferUsageBits_Uniform,
@@ -788,8 +1088,10 @@ void destroy() {
   textureDummyWhite_ = nullptr;
   skyboxTextureReference_ = nullptr;
   skyboxTextureIrradiance_ = nullptr;
-  textures_.clear();
-  texturesCache_.clear();
+   textures_.clear();
+   texturesCache_.clear();
+   s_textureSlots.clear();
+   s_handleToSlot.clear();
   sampler_ = nullptr;
   samplerShadow_ = nullptr;
   ctx_->destroy(fbMain_);
@@ -882,6 +1184,7 @@ bool loadAndCache(const char* cacheFileName) {
   }
 
   // loop over materials
+
   for (uint32_t mtlIdx = 0; mtlIdx != mesh->material_count; mtlIdx++) {
     const fastObjMaterial& m = mesh->materials[mtlIdx];
     CachedMaterial mtl;
@@ -961,12 +1264,24 @@ bool initModel() {
   }
 
   for (const auto& mtl : cachedMaterials_) {
+    const uint32_t dummyIdx = textureDummyWhite_.index();
     materials_.push_back(
-        GPUMaterial{vec4(mtl.ambient, 1.0f), vec4(mtl.diffuse, 1.0f), textureDummyWhite_.index(), textureDummyWhite_.index()});
+        GPUMaterial{vec4(mtl.ambient, 1.0f), vec4(mtl.diffuse, 1.0f), dummyIdx, dummyIdx});
+  }
+  // printf("GPUMaterial C++: Size=%zu, Align=%zu, Count=%zu\n", sizeof(GPUMaterial), alignof(GPUMaterial), materials_.size());
+  
+  // Pass material count to shader via constants if needed, or just clamp in shader for safety
+  // ...
+  
+  if (g_isMetal) {
+       s_textureSlots.clear();
+       s_handleToSlot.clear();
+       s_textureSlots.push_back(textureDummyWhite_);
+       s_handleToSlot[textureDummyWhite_.index()] = textureDummyWhite_.index();
   }
 
   sbMaterials_ = ctx_->createBuffer({.usage = lvk::BufferUsageBits_Storage,
-                                     .storage = lvk::StorageType_Device,
+                                     .storage = lvk::StorageType_HostVisible,
                                      .size = sizeof(GPUMaterial) * materials_.size(),
                                      .data = materials_.data(),
                                      .debugName = "Buffer: materials"},
@@ -1021,17 +1336,45 @@ void createPipelines() {
   smSkyboxVert_ = ctx_->createShaderModule({codeSkyboxSlang, lvk::Stage_Vert, "Shader Module: skybox (vert)"});
   smSkyboxFrag_ = ctx_->createShaderModule({codeSkyboxSlang, lvk::Stage_Frag, "Shader Module: skybox (frag)"});
 #else
-  smMeshVert_ = ctx_->createShaderModule({kCodeVS, lvk::Stage_Vert, "Shader Module: main (vert)"});
-  smMeshFrag_ = ctx_->createShaderModule({kCodeFS, lvk::Stage_Frag, "Shader Module: main (frag)"});
-  smMeshWireframeVert_ = ctx_->createShaderModule({kCodeVS_Wireframe, lvk::Stage_Vert, "Shader Module: main wireframe (vert)"});
-  smMeshWireframeFrag_ = ctx_->createShaderModule({kCodeFS_Wireframe, lvk::Stage_Frag, "Shader Module: main wireframe (frag)"});
-  smShadowVert_ = ctx_->createShaderModule({kShadowVS, lvk::Stage_Vert, "Shader Module: shadow (vert)"});
-  smShadowFrag_ = ctx_->createShaderModule({kShadowFS, lvk::Stage_Frag, "Shader Module: shadow (frag)"});
-  smFullscreenVert_ = ctx_->createShaderModule({kCodeFullscreenVS, lvk::Stage_Vert, "Shader Module: fullscreen (vert)"});
-  smFullscreenFrag_ = ctx_->createShaderModule({kCodeFullscreenFS, lvk::Stage_Frag, "Shader Module: fullscreen (frag)"});
-  smSkyboxVert_ = ctx_->createShaderModule({kSkyboxVS, lvk::Stage_Vert, "Shader Module: skybox (vert)"});
-  smSkyboxFrag_ = ctx_->createShaderModule({kSkyboxFS, lvk::Stage_Frag, "Shader Module: skybox (frag)"});
+  if (!g_isMetal) {
+      smMeshVert_ = ctx_->createShaderModule({kCodeVS, lvk::Stage_Vert, "Shader Module: main (vert)"});
+      smMeshFrag_ = ctx_->createShaderModule({kCodeFS, lvk::Stage_Frag, "Shader Module: main (frag)"});
+      smMeshWireframeVert_ = ctx_->createShaderModule({kCodeVS_Wireframe, lvk::Stage_Vert, "Shader Module: main wireframe (vert)"});
+      smMeshWireframeFrag_ = ctx_->createShaderModule({kCodeFS_Wireframe, lvk::Stage_Frag, "Shader Module: main wireframe (frag)"});
+      smShadowVert_ = ctx_->createShaderModule({kShadowVS, lvk::Stage_Vert, "Shader Module: shadow (vert)"});
+      smShadowFrag_ = ctx_->createShaderModule({kShadowFS, lvk::Stage_Frag, "Shader Module: shadow (frag)"});
+      smFullscreenVert_ = ctx_->createShaderModule({kCodeFullscreenVS, lvk::Stage_Vert, "Shader Module: fullscreen (vert)"});
+      smFullscreenFrag_ = ctx_->createShaderModule({kCodeFullscreenFS, lvk::Stage_Frag, "Shader Module: fullscreen (frag)"});
+      smSkyboxVert_ = ctx_->createShaderModule({kSkyboxVS, lvk::Stage_Vert, "Shader Module: skybox (vert)"});
+      smSkyboxFrag_ = ctx_->createShaderModule({kSkyboxFS, lvk::Stage_Frag, "Shader Module: skybox (frag)"});
+  }
 #endif // defined(LVK_DEMO_WITH_SLANG)
+
+  bool isMetal = g_isMetal;
+  if (isMetal) {
+      smMeshVert_ = ctx_->createShaderModule({kCodeVS_Metal, lvk::Stage_Vert, "Shader Module: main (vert)"});
+      smMeshFrag_ = ctx_->createShaderModule({kCodeFS_Metal, lvk::Stage_Frag, "Shader Module: main (frag)"});
+      smShadowVert_ = ctx_->createShaderModule({kShadowVS_Metal, lvk::Stage_Vert, "Shader Module: shadow (vert)"});
+      smShadowFrag_ = ctx_->createShaderModule({kShadowFS_Metal, lvk::Stage_Frag, "Shader Module: shadow (frag)"});
+      smSkyboxVert_ = ctx_->createShaderModule({kSkyboxVS_Metal, lvk::Stage_Vert, "Shader Module: skybox (vert)"});
+      smSkyboxFrag_ = ctx_->createShaderModule({kSkyboxFS_Metal, lvk::Stage_Frag, "Shader Module: skybox (frag)"});
+      // Use mesh shaders for wireframe for now as placeholder (Fix input mismatch later if needed)
+      // For now disable wireframe draw if it crashes, or use a position-only shader
+      smMeshWireframeVert_ = ctx_->createShaderModule({kCodeVS_Metal, lvk::Stage_Vert, "Shader Module: main (vert)"});
+      smMeshWireframeFrag_ = ctx_->createShaderModule({kCodeFS_Metal, lvk::Stage_Frag, "Shader Module: main (frag)"});
+      
+      // Fullscreen Shaders (using separate source without vertex attributes)
+      lvk::Result resultVert, resultFrag;
+      smFullscreenVert_ = ctx_->createShaderModule({kFullscreenMetal, "fullscreenVS", lvk::Stage_Vert, "Shader Module: fullscreen (vert)"}, &resultVert);
+      smFullscreenFrag_ = ctx_->createShaderModule({kFullscreenMetal, "fullscreenFS", lvk::Stage_Frag, "Shader Module: fullscreen (frag)"}, &resultFrag);
+      if (!resultVert.isOk()) {
+        printf("ERROR creating fullscreen vert shader: %s\n", resultVert.message);
+      }
+      if (!resultFrag.isOk()) {
+        printf("ERROR creating fullscreen frag shader: %s\n", resultFrag.message);
+      }
+  }
+
 
   {
     lvk::RenderPipelineDesc desc = {
@@ -1040,7 +1383,7 @@ void createPipelines() {
         .smFrag = smMeshFrag_,
         .color = {{.format = ctx_->getFormat(fbOffscreen_.color[0].texture)}},
         .depthFormat = ctx_->getFormat(fbOffscreen_.depthStencil.texture),
-        .cullMode = lvk::CullMode_Back,
+        .cullMode = lvk::CullMode_None,
         .frontFaceWinding = lvk::WindingMode_CCW,
         .samplesCount = kNumSamplesMSAA,
         .debugName = "Pipeline: mesh",
@@ -1052,10 +1395,11 @@ void createPipelines() {
 
     desc.specInfo = {.entries = {{.constantId = 0, .size = sizeof(uint32_t)}}, .data = &drawNormals, .dataSize = sizeof(drawNormals)},
 
+    desc.cullMode = lvk::CullMode_None;
     renderPipelineState_MeshNormals_ = ctx_->createRenderPipeline(desc, nullptr);
 
     desc.polygonMode = lvk::PolygonMode_Line;
-    desc.vertexInput = vdescs; // positions-only
+    desc.vertexInput = vdesc; // Use full vdesc since shader expects it
     desc.smVert = smMeshWireframeVert_;
     desc.smFrag = smMeshWireframeFrag_;
     desc.debugName = "Pipeline: mesh (wireframe)";
@@ -1084,7 +1428,13 @@ void createPipelines() {
         .cullMode = lvk::CullMode_None,
         .debugName = "Pipeline: fullscreen",
     };
-    renderPipelineState_Fullscreen_ = ctx_->createRenderPipeline(desc, nullptr);
+    lvk::Result pipelineResult;
+    renderPipelineState_Fullscreen_ = ctx_->createRenderPipeline(desc, &pipelineResult);
+    if (!renderPipelineState_Fullscreen_.valid()) {
+      printf("ERROR: Failed to create fullscreen pipeline! Result: %s\n", pipelineResult.message);
+    } else {
+      printf("Fullscreen pipeline created successfully\n");
+    }
   }
 
   // skybox
@@ -1258,11 +1608,16 @@ void render(double delta) {
   }
 
   positioner_.update(delta, mousePos_, mousePressed_);
-
+ 
   timestampBeginRendering = getCurrentTimestamp();
-
+ 
   const float fov = float(45.0f * (M_PI / 180.0f));
   const float aspectRatio = (float)width_ / (float)height_;
+ 
+  // Restore missing variables
+  const float shadowMapSize_ = 1000.0f;
+  const float shadowMapFar_ = 4000.0f;
+  const vec3 lightPos_ = vec3(100.0f, 100.0f, 100.0f);
 
   const mat4 shadowProj = glm::perspective(float(60.0f * (M_PI / 180.0f)), 1.0f, 10.0f, 4000.0f);
   const mat4 shadowView = mat4(vec4(0.772608519f, 0.532385886f, -0.345892131f, 0),
@@ -1270,7 +1625,7 @@ void render(double delta) {
                                vec4(0.634882748f, -0.647876859f, 0.420926809f, 0),
                                vec4(-58.9244843f, -30.4530792f, -508.410126f, 1.0f));
   const mat4 scaleBias = mat4(0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.5, 0.5, 0.0, 1.0);
-
+ 
   perFrame_ = UniformsPerFrame{
       .proj = glm::perspective(fov, aspectRatio, 0.5f, 500.0f),
       .view = camera_.getViewMatrix(),
@@ -1281,16 +1636,16 @@ void render(double delta) {
       .sampler = sampler_.index(),
       .samplerShadow = samplerShadow_.index(),
   };
-
+ 
   const mat4 modelMatrix = glm::scale(mat4(1.0f), vec3(0.05f));
-
+ 
   const UniformsPerObject perObject = {
       .model = modelMatrix,
       .normal = glm::transpose(glm::inverse(modelMatrix)),
   };
-
+ 
   lvk::ICommandBuffer& buffer = ctx_->acquireCommandBuffer();
-
+ 
   processLoadedMaterials(buffer);
 
   buffer.cmdUpdateBuffer(ubPerFrame_, 0, sizeof(perFrame_), &perFrame_);
@@ -1298,6 +1653,7 @@ void render(double delta) {
 
   // Pass 1: shadows
   if (isShadowMapDirty_) {
+    isShadowMapDirty_ = false;
     const UniformsPerFrame perFrameShadow{
         .proj = shadowProj,
         .view = shadowView,
@@ -1316,7 +1672,13 @@ void render(double delta) {
           .perFrame = ctx_->gpuAddress(ubPerFrameShadow_),
           .perObject = ctx_->gpuAddress(ubPerObject_),
       };
-      buffer.cmdPushConstants(bindings);
+      
+      if (g_isMetal) {
+          buffer.cmdBindBuffer(27, ubPerFrameShadow_);
+          buffer.cmdBindBuffer(28, ubPerObject_);
+      } else {
+          buffer.cmdPushConstants(bindings);
+      }
       buffer.cmdBindIndexBuffer(ib0_, lvk::IndexFormat_UI32);
       buffer.cmdDrawIndexed(static_cast<uint32_t>(indexData_.size()));
       buffer.cmdPopDebugGroupLabel();
@@ -1324,7 +1686,6 @@ void render(double delta) {
     buffer.cmdEndRendering();
     buffer.transitionToShaderReadOnly(fbShadowMap_.depthStencil.texture);
     buffer.cmdGenerateMipmap(fbShadowMap_.depthStencil.texture);
-    isShadowMapDirty_ = false;
   }
 
 #define GPU_TIMESTAMP(timestamp) buffer.cmdWriteTimestamp(queryPoolTimestamps_, timestamp);
@@ -1333,13 +1694,31 @@ void render(double delta) {
   {
     buffer.cmdResetQueryPool(queryPoolTimestamps_, 0, GPUTimestamp_NUM_TIMESTAMPS);
 
+    // Create/update argument buffer when textures are loaded (Metal only)
+    if (g_isMetal && !s_textureSlots.empty()) {
+        static bool argBufferCreated = false;
+        static size_t lastTextureCount = 0;
+        size_t currentCount = s_textureSlots.size();
+        
+        // Create once we have a reasonable number of textures, or update if count increased significantly
+        if (!argBufferCreated && currentCount >= 1) {
+            ctx_->createTextureArgumentBuffer(s_textureSlots);
+            argBufferCreated = true;
+            lastTextureCount = currentCount;
+            printf("Initial argument buffer created with %zu textures\n", currentCount);
+        } else if (argBufferCreated && currentCount > lastTextureCount) {
+            // Recreate whenever new textures are loaded
+            ctx_->createTextureArgumentBuffer(s_textureSlots);
+            lastTextureCount = currentCount;
+            printf("Argument buffer updated with %zu textures\n", currentCount);
+        }
+    }
+
     GPU_TIMESTAMP(GPUTimestamp_BeginSceneRendering);
 
-    // This will clear the framebuffer
     buffer.cmdBeginRendering(renderPassOffscreen_, fbOffscreen_);
     {
-      // Scene
-      buffer.cmdBindRenderPipeline(drawNormals_ ? renderPipelineState_MeshNormals_ : renderPipelineState_Mesh_);
+      buffer.cmdBindRenderPipeline(renderPipelineState_Mesh_);
       buffer.cmdPushDebugGroupLabel("Render Mesh", 0xff0000ff);
       buffer.cmdBindDepthState(depthState_);
       buffer.cmdBindVertexBuffer(0, vb0_, 0);
@@ -1353,7 +1732,19 @@ void render(double delta) {
           .perObject = ctx_->gpuAddress(ubPerObject_),
           .materials = ctx_->gpuAddress(sbMaterials_),
       };
-      buffer.cmdPushConstants(bindings);
+      if (g_isMetal) {
+          buffer.cmdBindBuffer(26, sbMaterials_);
+          buffer.cmdBindBuffer(27, ubPerFrame_);
+          buffer.cmdBindBuffer(28, ubPerObject_);
+          // Bind shadow map and skybox textures at fixed slots for the fragment shader
+          buffer.cmdBindTexture(5, fbShadowMap_.depthStencil.texture);
+          if (!skyboxTextureIrradiance_.empty())
+            buffer.cmdBindTexture(6, skyboxTextureIrradiance_);
+          if (!skyboxTextureReference_.empty())
+            buffer.cmdBindTexture(7, skyboxTextureReference_);
+      } else {
+          buffer.cmdPushConstants(bindings);
+      }
       buffer.cmdBindIndexBuffer(ib0_, lvk::IndexFormat_UI32);
       buffer.cmdDrawIndexed(static_cast<uint32_t>(indexData_.size()));
       if (enableWireframe_) {
@@ -1366,6 +1757,11 @@ void render(double delta) {
       buffer.cmdBindRenderPipeline(renderPipelineState_Skybox_);
       buffer.cmdPushDebugGroupLabel("Render Skybox", 0x00ff00ff);
       buffer.cmdBindDepthState(depthStateLEqual_);
+      if (g_isMetal) {
+          buffer.cmdBindBuffer(27, ubPerFrame_);
+          if (!skyboxTextureReference_.empty())
+            buffer.cmdBindTexture(0, skyboxTextureReference_);
+      }
       buffer.cmdDraw(3 * 6 * 2);
       buffer.cmdPopDebugGroupLabel();
     }
@@ -1423,7 +1819,11 @@ void render(double delta) {
       } bindings = {
           .texture = tex.index(),
       };
-      buffer.cmdPushConstants(bindings);
+      if (g_isMetal) {
+          buffer.cmdBindTexture(0, tex);
+      } else {
+          buffer.cmdPushConstants(bindings);
+      }
       buffer.cmdDraw(3);
       buffer.cmdPopDebugGroupLabel();
 
@@ -1617,8 +2017,8 @@ void loadMaterial(size_t i) {
   const LoadedMaterial mtl{i, ambient, diffuse, alpha};
 
   if (!mtl.ambient.pixels && !mtl.diffuse.pixels) {
-    // skip missing textures
-    materials_[i].texDiffuse = 0;
+    // skip missing textures - keep dummy texture index
+    materials_[i].texDiffuse = textureDummyWhite_.index();
   } else {
     std::lock_guard guard(loadedMaterialsMutex_);
     loadedMaterials_.push_back(mtl);
@@ -1876,7 +2276,7 @@ lvk::TextureHandle createTexture(const LoadedImage& img) {
 
   // No mip-maps come from files on Apple and Android platforms, we need to generate them.
 #if defined(__APPLE__) || defined(ANDROID)
-  const bool generateMipmaps = true;
+  const bool generateMipmaps = !hasCompressedTexture;
 #else
   const bool generateMipmaps = !hasCompressedTexture;
 #endif
@@ -1888,7 +2288,7 @@ lvk::TextureHandle createTexture(const LoadedImage& img) {
       .usage = lvk::TextureUsageBits_Sampled,
       .numMipLevels = lvk::calcNumMipLevels(img.w, img.h),
       .components = (img.channels == 1) ? lvk::ComponentMapping{lvk::Swizzle_R, lvk::Swizzle_R, lvk::Swizzle_R, lvk::Swizzle_R}
-                                        : lvk::ComponentMapping{},
+                                        : lvk::ComponentMapping{lvk::Swizzle_R, lvk::Swizzle_G, lvk::Swizzle_B, lvk::Swizzle_A},
       .data = initialData,
       .dataNumMipLevels = initialDataNumMipLevels,
       .generateMipmaps = generateMipmaps,
@@ -1923,10 +2323,26 @@ void processLoadedMaterials(lvk::ICommandBuffer& buffer) {
     tex.diffuse = createTexture(mtl.diffuse);
     tex.alpha = createTexture(mtl.alpha);
 
-    // update GPU materials
-    materials_[mtl.idx].texAmbient = tex.ambient.index();
-    materials_[mtl.idx].texDiffuse = tex.diffuse.index();
-    materials_[mtl.idx].texAlpha = tex.alpha.index();
+    // update GPU materials - use raw handle index (matches Vulkan bindless descriptor indexing)
+    const uint32_t dummyIdx = textureDummyWhite_.index();
+    materials_[mtl.idx].texAmbient = tex.ambient.valid() ? tex.ambient.index() : dummyIdx;
+    materials_[mtl.idx].texDiffuse = tex.diffuse.valid() ? tex.diffuse.index() : dummyIdx;
+    materials_[mtl.idx].texAlpha = tex.alpha.valid() ? tex.alpha.index() : 0;
+
+    // Track textures for Metal argument buffer
+    if (g_isMetal) {
+        auto trackTex = [](lvk::TextureHandle h) {
+            if (!h.valid()) return;
+            uint32_t idx = h.index();
+            if (s_handleToSlot.find(idx) == s_handleToSlot.end()) {
+                s_handleToSlot[idx] = idx;
+                s_textureSlots.push_back(h);
+            }
+        };
+        trackTex(tex.ambient);
+        trackTex(tex.diffuse);
+        trackTex(tex.alpha);
+    }
     textures_[mtl.idx] = std::move(tex);
   }
   LVK_ASSERT(materials_[mtl.idx].texAmbient >= 0);
@@ -2067,6 +2483,20 @@ double getCurrentTimestamp() {
 }
 
 int main(int argc, char* argv[]) {
+  bool headless = false;
+  uint64_t screenshotFrame = 0;
+  std::string screenshotFile = "screenshot.png";
+  
+  for (int i = 1; i < argc; i++) {
+    if (!strcmp(argv[i], "--headless")) {
+        headless = true;
+    } else if (!strcmp(argv[i], "--screenshot-frame") && i + 1 < argc) {
+        screenshotFrame = strtoull(argv[++i], nullptr, 10);
+    } else if (!strcmp(argv[i], "--screenshot-file") && i + 1 < argc) {
+        screenshotFile = argv[++i];
+    }
+  }
+
   minilog::initialize(nullptr, {.threadNames = false});
 
   // find the content folder
@@ -2087,25 +2517,43 @@ int main(int argc, char* argv[]) {
     folderContentRoot = (dir / subdir).string();
   }
 
+  // Handle headless width/height override if needed, otherwise default
+  if (!width_) width_ = 1280;
+  if (!height_) height_ = 720;
+
   GLFWwindow* window = lvk::initWindow("Vulkan Bistro", width_, height_);
-  ctx_ = lvk::createVulkanContextWithSwapchain(window,
-                                               width_,
-                                               height_,
-                                               {
-                                                   .enableValidation = kEnableValidationLayers,
-                                               },
-                                               kPreferIntegratedGPU ? lvk::HWDeviceType_Integrated : lvk::HWDeviceType_Discrete);
+  
+  const char* deviceEnv = std::getenv("LVK_DEVICE");
+  if (deviceEnv && strcmp(deviceEnv, "metal") == 0) {
+      printf("Creating Metal Context...\n");
+      g_isMetal = true;
+      ctx_ = lvk::createMetalContextWithSwapchain(window, width_, height_, { .enableValidation = kEnableValidationLayers, .enableHeadlessSurface = headless });
+      printf("Metal Context Created: %p\n", ctx_.get());
+  } else {
+      ctx_ = lvk::createVulkanContextWithSwapchain(window,
+                                                   width_,
+                                                   height_,
+                                                   {
+                                                       .enableValidation = kEnableValidationLayers,
+                                                       .enableHeadlessSurface = headless
+                                                   },
+                                                   kPreferIntegratedGPU ? lvk::HWDeviceType_Integrated : lvk::HWDeviceType_Discrete);
+  }
   if (!ctx_) {
     return EXIT_FAILURE;
   }
+  printf("Context created.\n");
 
   if (kEnableCompression) {
     printf("Compressing textures... It can take a while in debug builds...(needs to be done once)\n");
   }
 
+  printf("Calling init()...\n");
   if (!init()) {
+    printf("init() failed\n");
     return EXIT_FAILURE;
   }
+  printf("init() success.\n");
 
   glfwSetFramebufferSizeCallback(window, [](GLFWwindow*, int width, int height) {
     width_ = width;
@@ -2218,8 +2666,10 @@ int main(int argc, char* argv[]) {
 
   double prevTime = getCurrentTimestamp();
 
+  uint64_t frameCount = 0;
+
   // Main loop
-  while (!glfwWindowShouldClose(window)) {
+  while (headless || !glfwWindowShouldClose(window)) {
     glfwPollEvents();
 
     const double newTime = getCurrentTimestamp();
@@ -2232,6 +2682,50 @@ int main(int argc, char* argv[]) {
     fps_.tick(delta);
 
     render(delta);
+    
+    // Screenshot logic
+    bool isLoading = remainingMaterialsToLoad_.load() > 0;
+    if (screenshotFrame > 0 && !isLoading && ++frameCount >= screenshotFrame) {
+        ctx_->wait({});
+        lvk::TextureHandle tex = ctx_->getCurrentSwapchainTexture();
+        const lvk::Dimensions dim = ctx_->getDimensions(tex);
+        printf("Saving screenshot to %s (%ux%u)...\n", screenshotFile.c_str(), dim.width, dim.height);
+        
+        std::vector<uint8_t> pixelsRGBA(dim.width * dim.height * 4);
+        std::vector<uint8_t> pixelsRGB(dim.width * dim.height * 3);
+        ctx_->download(tex, {.dimensions = {dim.width, dim.height}}, pixelsRGBA.data());
+        
+        // Convert BGRA (common in swapchains) to RGB, or RGBA to RGB. 
+        // LVK usually returns BGRA for swapchains on Metal/Vulkan.
+        const lvk::Format format = ctx_->getFormat(tex);
+        if (format == lvk::Format_BGRA_UN8 || format == lvk::Format_BGRA_SRGB8) {
+           for (uint32_t i = 0; i < pixelsRGBA.size(); i += 4) {
+             std::swap(pixelsRGBA[i + 0], pixelsRGBA[i + 2]);
+           }
+        }
+        
+        for (uint32_t i = 0; i < pixelsRGB.size() / 3; i++) {
+            pixelsRGB[3 * i + 0] = pixelsRGBA[4 * i + 0];
+            pixelsRGB[3 * i + 1] = pixelsRGBA[4 * i + 1];
+            pixelsRGB[3 * i + 2] = pixelsRGBA[4 * i + 2];
+        }
+        
+        stbi_write_png(screenshotFile.c_str(), (int)dim.width, (int)dim.height, 3, pixelsRGB.data(), 0);
+        
+        // Output PPM as well for validation
+        {
+          std::string ppmFile = screenshotFile.substr(0, screenshotFile.find_last_of('.')) + ".ppm";
+          FILE* f = fopen(ppmFile.c_str(), "wb");
+          if (f) {
+             fprintf(f, "P6\n%d %d\n255\n", dim.width, dim.height);
+             fwrite(pixelsRGB.data(), 1, pixelsRGB.size(), f);
+             fclose(f);
+             printf("Saved %s for validation.\n", ppmFile.c_str());
+          }
+        }
+        
+        if (headless) break;
+    }
   }
 
   // destroy all the Vulkan stuff before closing the window

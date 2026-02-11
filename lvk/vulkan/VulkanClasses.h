@@ -370,7 +370,9 @@ class CommandBuffer final : public ICommandBuffer {
 
   void cmdBindVertexBuffer(uint32_t index, BufferHandle buffer, uint64_t bufferOffset) override;
   void cmdBindIndexBuffer(BufferHandle indexBuffer, IndexFormat indexFormat, uint64_t indexBufferOffset) override;
-  void cmdPushConstants(const void* data, size_t size, size_t offset) override;
+  void cmdBindBuffer(uint32_t index, BufferHandle buffer) override;
+  void cmdBindTexture(uint32_t index, TextureHandle texture) override;
+  void cmdPushConstants(const void* data, size_t size, size_t offset = 0) override;
 
   void cmdCopyBuffer(BufferHandle srcBuffer, BufferHandle dstBuffer, size_t srcOffset, size_t dstOffset, size_t size) override;
   void cmdFillBuffer(BufferHandle buffer, size_t bufferOffset, size_t size, uint32_t data) override;

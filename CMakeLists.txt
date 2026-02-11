@@ -4,8 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 
 cmake_minimum_required(VERSION 3.22)
-
 include(CMakeDependentOption)
+
+
 include(FetchContent)
 
 project("LVK" CXX C)
@@ -25,7 +26,27 @@ option(LVK_WITH_OPENXR             "Enable OpenXR"                           OFF
 option(LVK_WITH_ANDROID_VALIDATION "Enable validation layers on Android"     ON)
 option(LVK_WITH_SLANG              "Enable Slang compiler"                   OFF)
 
-cmake_dependent_option(LVK_WITH_VULKAN_PORTABILITY "Enable portability extension" ON "APPLE" OFF)
+option(LVK_WITH_VULKAN_PORTABILITY "Enable Vulkan Portability (MoltenVK on MacOS)" OFF)
+option(LVK_WITH_WAYLAND "Enable Wayland" OFF)
+option(LVK_WITH_METAL "Enable Metal Backend" ON)
+
+if (WIN32)
+   add_compile_definitions(VK_USE_PLATFORM_WIN32_KHR)
+elseif(ANDROID)
+   add_compile_definitions(VK_USE_PLATFORM_ANDROID_KHR)
+elseif(APPLE)
+   if(LVK_WITH_METAL)
+      add_compile_definitions(LVK_WITH_METAL)
+   else()
+      add_compile_definitions(VK_USE_PLATFORM_METAL_EXT)
+   endif()
+elseif(UNIX)
+   if(LVK_WITH_WAYLAND)
+      add_compile_definitions(VK_USE_PLATFORM_WAYLAND_KHR)
+   else()
+      add_compile_definitions(VK_USE_PLATFORM_XLIB_KHR)
+   endif()
+endif()
 
 set(LVK_ANDROID_ABI "arm64-v8a" CACHE STRING "Enabled ABI on Android")
 set(LVK_CUSTOM_MOLTENVK_PATH "" CACHE STRING "Path to custom MoltenVK")

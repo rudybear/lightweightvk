@@ -410,23 +410,22 @@ Holder<TextureHandle> MetalContext::createTexture(const TextureDesc& desc, const
       isUnified = [device_ hasUnifiedMemory];
   }
   
-  if (desc.usage & TextureUsageBits_Storage) {
+  // MSAA textures must use Private storage on Metal
+  if (desc.numSamples > 1) {
+      mtlDesc.storageMode = MTLStorageModePrivate;
+  } else if (desc.usage & TextureUsageBits_Storage) {
       if (isUnified) {
           mtlDesc.storageMode = MTLStorageModeShared;
       } else {
           mtlDesc.storageMode = MTLStorageModeManaged;
       }
   } else {
-      // Force Shared/Managed to ensure we use replaceRegion Fast Path
       if (isUnified) {
           mtlDesc.storageMode = MTLStorageModeShared;
       } else {
           mtlDesc.storageMode = MTLStorageModeManaged;
       }
   }
-  
-  // Force Private if explicitly requested (not in Desc yet, assuming default behavior)
-  // Actually, for the Dummy Texture test, we populate data on CPU, so we need Shared/Managed.
   
   id<MTLTexture> texture = [device_ newTextureWithDescriptor:mtlDesc];
   if (!texture) {
@@ -614,7 +613,12 @@ Holder<RenderPipelineHandle> MetalContext::createRenderPipeline(const RenderPipe
   }
   
   pipelineDesc.vertexDescriptor = vertexDesc;
-  
+
+  // MSAA sample count
+  if (desc.samplesCount > 1) {
+    pipelineDesc.rasterSampleCount = desc.samplesCount;
+  }
+
   NSError* error = nil;
   id<MTLRenderPipelineState> pipelineState = [device_ newRenderPipelineStateWithDescriptor:pipelineDesc error:&error];
 
@@ -1004,7 +1008,11 @@ void MetalContext::recreateSwapchain(int newWidth, int newHeight) {
    }
 }
 
-uint32_t MetalContext::getFramebufferMSAABitMask() const { return 1; }
+uint32_t MetalContext::getFramebufferMSAABitMask() const {
+  // Apple Silicon GPUs support 1, 2, 4, and 8 samples
+  // Return bitmask matching VkSampleCountFlags: bit0=1x, bit1=2x, bit2=4x, bit3=8x
+  return 0xF; // 1 | 2 | 4 | 8
+}
 
 double MetalContext::getTimestampPeriodToMs() const { return 1.0; }
 bool MetalContext::getQueryPoolResults(QueryPoolHandle pool, uint32_t firstQuery, uint32_t queryCount, size_t dataSize, void* outData, size_t stride) const { return false; }

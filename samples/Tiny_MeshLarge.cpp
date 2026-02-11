@@ -69,7 +69,7 @@ constexpr uint32_t kMeshCacheVersion = 0xC0DE000B;
 #if !defined(__APPLE__)
 constexpr int kNumSamplesMSAA = 8;
 #else
-constexpr int kNumSamplesMSAA = 1;
+constexpr int kNumSamplesMSAA = 4;
 #endif
 #if defined(__APPLE__) || defined(ANDROID)
 constexpr bool kEnableCompression = false;
